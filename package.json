@@ -1,0 +1,66 @@
+{
+  "name": "interview-assessor-ai",
+  "productName": "Interview Assessor AI",
+  "version": "0.1.0",
+  "description": "Consent-first desktop assistant for interviewers: live transcript, screen text capture, rubric notes, and structured follow-up prompts.",
+  "private": false,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit && electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "npm run build && electron-builder --mac --win",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "electron",
+    "interview",
+    "transcription",
+    "ocr",
+    "assessment",
+    "realtime"
+  ],
+  "author": "Fedor Avdeev",
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  },
+  "build": {
+    "appId": "ai.interview.assessor",
+    "productName": "Interview Assessor AI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  }
+}
