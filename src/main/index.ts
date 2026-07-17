@@ -64,7 +64,7 @@ function createMainWindow(): void {
     icon: getWindowIconPath(),
     title: 'Interview Assessor AI',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -107,7 +107,7 @@ function createOverlayWindow(): void {
     title: 'Interview Assessor AI Overlay',
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -135,19 +135,23 @@ app.whenReady().then(() => {
   setDockIcon()
 
   ipcMain.handle('capture:list-sources', async (): Promise<CaptureSourceDescriptor[]> => {
-    const sources = await desktopCapturer.getSources({
-      types: ['window', 'screen'],
-      fetchWindowIcons: true,
-      thumbnailSize: { width: 320, height: 200 }
-    })
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['window', 'screen'],
+        fetchWindowIcons: true,
+        thumbnailSize: { width: 320, height: 200 }
+      })
 
-    return sources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      kind: source.id.startsWith('screen:') ? 'screen' : 'window',
-      thumbnail: source.thumbnail.toDataURL(),
-      appIcon: source.appIcon?.toDataURL()
-    }))
+      return sources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        kind: source.id.startsWith('screen:') ? 'screen' : 'window',
+        thumbnail: source.thumbnail.toDataURL(),
+        appIcon: source.appIcon?.toDataURL()
+      }))
+    } catch {
+      return []
+    }
   })
   ipcMain.handle('capture:get-screen-access-status', () => systemPreferences.getMediaAccessStatus('screen'))
   ipcMain.handle('capture:open-screen-settings', () =>
