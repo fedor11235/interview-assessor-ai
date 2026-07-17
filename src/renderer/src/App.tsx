@@ -183,7 +183,6 @@ export function App() {
 
     try {
       setCapture({ running: true, screen: false, microphone: false, speechRecognition: false })
-      void window.assessor?.openOverlay()
 
       if (wantsScreen) {
         handlesRef.current.screenStream = await startScreenCapture(selectedSourceId)
@@ -203,6 +202,7 @@ export function App() {
         )
       }
 
+      void window.assessor?.openOverlay()
       demoStopRef.current = createDemoRecognitionLoop(mode, ({ item }) => appendSignal(item))
 
       setCapture({

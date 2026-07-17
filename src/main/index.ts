@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, session, shell, systemPreferences } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,6 +51,21 @@ function setDockIcon(): void {
   if (process.platform === 'darwin' && iconPath) {
     app.dock?.setIcon(iconPath)
   }
+}
+
+function configureDisplayMediaPicker(): void {
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      void desktopCapturer
+        .getSources({ types: ['window', 'screen'], thumbnailSize: { width: 1, height: 1 } })
+        .then((sources) => {
+          const source = sources.find((item) => item.id.startsWith('window:')) ?? sources[0]
+          callback(source ? { video: source } : {})
+        })
+        .catch(() => callback({}))
+    },
+    { useSystemPicker: true }
+  )
 }
 
 function createMainWindow(): void {
@@ -133,6 +148,7 @@ function sendOverlaySnapshot(): void {
 
 app.whenReady().then(() => {
   setDockIcon()
+  configureDisplayMediaPicker()
 
   ipcMain.handle('capture:list-sources', async (): Promise<CaptureSourceDescriptor[]> => {
     try {
