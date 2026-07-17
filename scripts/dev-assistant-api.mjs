@@ -12,6 +12,7 @@ const fileEnv = {
 const env = { ...fileEnv, ...process.env }
 const port = Number(env.ASSISTANT_API_PORT || 3011)
 const apiToken = env.ASSISTANT_API_TOKEN || ''
+const devDemoEnabled = env.ENABLE_DEV_DEMO_API !== 'false'
 const explicitModel = Boolean(env.OPENAI_MODEL)
 const modelCandidates = explicitModel ? [env.OPENAI_MODEL] : ['gpt-5-mini', 'gpt-4.1-mini']
 
@@ -30,6 +31,7 @@ const server = createServer(async (request, response) => {
     sendJson(response, 200, {
       ok: true,
       hasOpenAiKey: Boolean(env.OPENAI_API_KEY),
+      demoMode: !env.OPENAI_API_KEY && devDemoEnabled,
       model: modelCandidates[0]
     })
     return
@@ -45,16 +47,26 @@ const server = createServer(async (request, response) => {
     return
   }
 
-  if (!env.OPENAI_API_KEY) {
-    sendJson(response, 503, {
-      error: 'OPENAI_API_KEY is missing. Add it to .env.local to use real AI locally.'
-    })
-    return
-  }
-
   try {
     const payload = await readJsonBody(request)
     const startedAt = Date.now()
+
+    if (!env.OPENAI_API_KEY) {
+      if (!devDemoEnabled) {
+        sendJson(response, 503, {
+          error: 'OPENAI_API_KEY is missing. Add it to .env.local to use real AI locally.'
+        })
+        return
+      }
+
+      sendJson(response, 200, {
+        ...createDemoAnswer(payload),
+        model: 'local-demo',
+        latencyMs: Date.now() - startedAt
+      })
+      return
+    }
+
     const answer = await askOpenAi(payload)
     sendJson(response, 200, {
       ...answer,
@@ -73,9 +85,64 @@ server.listen(port, () => {
   console.log(
     env.OPENAI_API_KEY
       ? `OpenAI model: ${modelCandidates[0]}`
-      : 'OPENAI_API_KEY is missing; create .env.local for real AI answers.'
+      : 'OPENAI_API_KEY is missing; local demo answers are enabled.'
   )
 })
+
+function createDemoAnswer(payload) {
+  const signal = payload?.signal || {}
+  const text = String(signal.text || '')
+  const lower = text.toLowerCase()
+  const hasImage = Boolean(signal.imageDataUrl)
+
+  if (
+    lower.includes('функциональ') &&
+    lower.includes('тест') &&
+    (lower.includes('уров') || lower.includes('level'))
+  ) {
+    return {
+      observedText: text,
+      insights: [
+        normalizeInsight({
+          kind: 'summary',
+          title: 'Demo: правильный вариант',
+          body:
+            'Функциональное тестирование может выполняться на всех уровнях тестирования: компонентном, интеграционном, системном и приемочном.',
+          confidence: 0.82
+        })
+      ].filter(Boolean)
+    }
+  }
+
+  if (hasImage) {
+    return {
+      observedText: 'Demo mode: кадр выбранного окна получен. Для чтения текста с картинки добавь OPENAI_API_KEY.',
+      insights: [
+        normalizeInsight({
+          kind: 'summary',
+          title: 'Demo: кадр получен',
+          body:
+            'Цепочка работает: приложение захватило выбранное окно, отправило кадр на локальный API и получило ответ. Для настоящего анализа текста с экрана нужен OPENAI_API_KEY.',
+          confidence: 0.72
+        })
+      ].filter(Boolean)
+    }
+  }
+
+  return {
+    observedText: text || 'Demo mode: входной сигнал получен.',
+    insights: [
+      normalizeInsight({
+        kind: 'summary',
+        title: 'Demo: сигнал обработан',
+        body:
+          text.trim() ||
+          'Локальный API отвечает без OpenAI ключа. Можно проверить оверлей, звук, статусы и скорость обновления интерфейса.',
+        confidence: 0.72
+      })
+    ].filter(Boolean)
+  }
+}
 
 async function askOpenAi(payload) {
   let lastError

@@ -39,30 +39,45 @@ interface RawAssistantResponse {
 }
 
 const DEFAULT_API_URL = 'http://localhost:3011/api/answer'
+const DEFAULT_TIMEOUT_MS = 35000
 
 export async function requestAssistantAnswer(request: AssistantApiRequest): Promise<AssistantApiResponse> {
   const endpoint = import.meta.env.VITE_ASSISTANT_API_URL || DEFAULT_API_URL
   const token = import.meta.env.VITE_ASSISTANT_API_TOKEN
+  const timeoutMs = getApiTimeoutMs()
   const startedAt = performance.now()
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: JSON.stringify(request)
-  })
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal
+    })
 
-  const payload = (await response.json().catch(() => ({}))) as RawAssistantResponse & {
-    error?: string
+    const payload = (await response.json().catch(() => ({}))) as RawAssistantResponse & {
+      error?: string
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || `Assistant API returned ${response.status}`)
+    }
+
+    return normalizeAssistantResponse(payload, Math.round(performance.now() - startedAt))
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`API не ответил за ${Math.round(timeoutMs / 1000)} сек. Проверь ключ, сеть или модель.`)
+    }
+
+    throw error
+  } finally {
+    window.clearTimeout(timeoutId)
   }
-
-  if (!response.ok) {
-    throw new Error(payload.error || `Assistant API returned ${response.status}`)
-  }
-
-  return normalizeAssistantResponse(payload, Math.round(performance.now() - startedAt))
 }
 
 function normalizeAssistantResponse(payload: RawAssistantResponse, measuredLatencyMs: number): AssistantApiResponse {
@@ -135,4 +150,9 @@ function normalizeConfidence(value: unknown): number {
   }
 
   return Math.min(1, Math.max(0, value))
+}
+
+function getApiTimeoutMs(): number {
+  const value = Number(import.meta.env.VITE_ASSISTANT_API_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS)
+  return Number.isFinite(value) && value >= 5000 ? value : DEFAULT_TIMEOUT_MS
 }

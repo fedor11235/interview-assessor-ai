@@ -440,10 +440,14 @@ export function App() {
           </div>
 
           <header className="overlay-status">
-            <span className={capture.running ? 'overlay-dot active' : 'overlay-dot'} />
-            <strong>{capture.running ? 'Live overlay' : 'Overlay ready'}</strong>
+            <span className={apiState.status === 'thinking' ? 'overlay-dot pulse' : capture.running ? 'overlay-dot active' : 'overlay-dot'} />
+            <strong>{getOverlayStatusTitle(apiState.status, capture.running)}</strong>
             <em>{overlaySourceName || mode}</em>
           </header>
+
+          <p className={`overlay-api-message overlay-api-${apiState.status}`}>
+            {apiState.message}
+          </p>
 
           {latestSignal ? (
             <article className="overlay-signal">
@@ -452,7 +456,20 @@ export function App() {
             </article>
           ) : null}
 
-          {primaryInsight ? (
+          {apiState.status === 'thinking' ? (
+            <article className="overlay-answer-card overlay-answer-thinking">
+              <div className="overlay-answer-icon">
+                <Sparkles size={20} aria-hidden="true" />
+              </div>
+              <div>
+                <div className="overlay-answer-title">
+                  <h1>Анализирую окно</h1>
+                  <span>до 35 сек</span>
+                </div>
+                <p>Обычно это занимает 3-12 секунд. Если дольше, сработает таймаут и я покажу причину.</p>
+              </div>
+            </article>
+          ) : primaryInsight ? (
             <article className={`overlay-answer-card overlay-answer-${primaryInsight.kind}`}>
               <div className="overlay-answer-icon">
                 <Sparkles size={20} aria-hidden="true" />
@@ -611,6 +628,22 @@ function markFallback(insight: InsightCard): InsightCard {
     title: `Локальный fallback: ${insight.title}`,
     confidence: Math.min(insight.confidence, 0.62)
   }
+}
+
+function getOverlayStatusTitle(status: AssistantApiState['status'], running: boolean): string {
+  if (status === 'thinking') {
+    return 'AI анализирует'
+  }
+
+  if (status === 'offline') {
+    return 'API недоступен'
+  }
+
+  if (status === 'online') {
+    return 'AI ответил'
+  }
+
+  return running ? 'Live overlay' : 'Overlay ready'
 }
 
 function isOverlaySnapshot(value: unknown): value is OverlaySnapshot {

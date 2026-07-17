@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_ASSISTANT_API_URL?: string
   readonly VITE_ASSISTANT_API_TOKEN?: string
+  readonly VITE_ASSISTANT_API_TIMEOUT_MS?: string
   readonly VITE_SCREEN_ANALYSIS_INTERVAL_MS?: string
 }
 

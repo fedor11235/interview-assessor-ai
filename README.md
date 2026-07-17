@@ -33,6 +33,8 @@ npm run api:dev
 
 The Electron renderer sends signals to `VITE_ASSISTANT_API_URL`, which defaults to `http://localhost:3011/api/answer`. The local API keeps `OPENAI_API_KEY` server-side and returns the same answer shape a production backend can return.
 
+If `OPENAI_API_KEY` is empty, the local API returns `local-demo` answers with `200 OK` so the capture, overlay, audio, and status flow can be tested without a real model. Set `ENABLE_DEV_DEMO_API=false` to make missing keys fail loudly again.
+
 Build the app:
 
 ```bash
