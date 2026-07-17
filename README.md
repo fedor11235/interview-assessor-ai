@@ -7,6 +7,7 @@ Consent-first desktop assistant for people who conduct interviews or exams. It c
 - Electron + React + TypeScript desktop app.
 - Main assessment console with interview modes: oral, text screen, coding.
 - Transparent always-on-top overlay window.
+- Custom macOS/Windows app icon.
 - Consent gate before capture starts.
 - Browser-based screen and microphone capture for the MVP.
 - Pluggable recognition layer for real STT/OCR adapters.
@@ -62,7 +63,16 @@ This project is not intended for hidden assistance during interviews, undisclose
 
 See [docs/ethics-and-consent.md](docs/ethics-and-consent.md).
 
+## Icon
+
+Regenerate app icons after editing `assets/app-icon.svg`:
+
+```bash
+npm run icons
+```
+
+The icon source uses an MIT-licensed symbol from Microsoft Fluent UI System Icons. See [docs/third-party-notices.md](docs/third-party-notices.md).
+
 ## License
 
 MIT
-

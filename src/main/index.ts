@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,6 +28,14 @@ function loadRenderer(window: BrowserWindow, hash?: string): void {
   void window.loadFile(entry.file!, { hash: entry.hash })
 }
 
+function getWindowIconPath(): string | undefined {
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../build/icon.png')
+
+  return existsSync(iconPath) ? iconPath : undefined
+}
+
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -35,6 +44,7 @@ function createMainWindow(): void {
     minHeight: 720,
     backgroundColor: '#f3f0e8',
     show: false,
+    icon: getWindowIconPath(),
     title: 'Interview Assessor AI',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -69,6 +79,7 @@ function createOverlayWindow(): void {
     resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    icon: getWindowIconPath(),
     title: 'Interview Assessor AI Overlay',
     backgroundColor: '#00000000',
     webPreferences: {
@@ -107,4 +118,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
