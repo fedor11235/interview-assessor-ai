@@ -64,7 +64,7 @@ function createMainWindow(): void {
     icon: getWindowIconPath(),
     title: 'Interview Assessor AI',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -107,7 +107,7 @@ function createOverlayWindow(): void {
     title: 'Interview Assessor AI Overlay',
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
       nodeIntegration: false
     }
