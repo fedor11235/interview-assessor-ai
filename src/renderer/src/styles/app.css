@@ -81,14 +81,19 @@ button:disabled {
 }
 
 .mark {
-  display: grid;
   width: 44px;
   height: 44px;
-  place-items: center;
   border-radius: 8px;
-  color: #fffaf0;
-  background: linear-gradient(135deg, var(--ink), var(--teal));
-  font-weight: 800;
+  overflow: hidden;
+  background: var(--teal);
+  box-shadow: 0 8px 18px rgba(20, 92, 89, 0.18);
+  flex: 0 0 auto;
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .brand-lockup p,
@@ -526,4 +531,3 @@ meter {
     justify-content: flex-start;
   }
 }
-

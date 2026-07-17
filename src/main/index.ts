@@ -36,6 +36,14 @@ function getWindowIconPath(): string | undefined {
   return existsSync(iconPath) ? iconPath : undefined
 }
 
+function setDockIcon(): void {
+  const iconPath = getWindowIconPath()
+
+  if (process.platform === 'darwin' && iconPath) {
+    app.dock?.setIcon(iconPath)
+  }
+}
+
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -98,6 +106,8 @@ function createOverlayWindow(): void {
 }
 
 app.whenReady().then(() => {
+  setDockIcon()
+
   ipcMain.handle('overlay:open', () => createOverlayWindow())
   ipcMain.handle('overlay:close', () => overlayWindow?.close())
   ipcMain.handle('overlay:set-pass-through', (_event, enabled: boolean) => {

@@ -1,4 +1,5 @@
 import { AudioLines, MonitorUp, PanelTopOpen, Square, WandSparkles } from 'lucide-react'
+import appIcon from '../../../../assets/app-icon.svg'
 import type { CaptureState, InterviewMode } from '../lib/session'
 import { modeLabels } from '../lib/session'
 
@@ -26,7 +27,9 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="brand-lockup">
-        <div className="mark">IA</div>
+        <div className="mark" aria-hidden="true">
+          <img src={appIcon} alt="" />
+        </div>
         <div>
           <p>Interview Assessor AI</p>
           <span>Desktop console</span>
@@ -77,4 +80,3 @@ export function TopBar({
     </header>
   )
 }
-
