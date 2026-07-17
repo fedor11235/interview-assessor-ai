@@ -8,6 +8,7 @@ Consent-first desktop assistant for people who conduct interviews or exams. It c
 - Main assessment console with interview modes: oral, text screen, coding.
 - Transparent always-on-top overlay window.
 - Output mode: overlay, audio, or both.
+- Answer format switch: multiple-choice test or open/manual question.
 - Custom macOS/Windows app icon.
 - Explicit window/screen source picker for text and coding modes.
 - Consent gate before capture starts.

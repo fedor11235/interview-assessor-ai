@@ -75,9 +75,9 @@ button:disabled {
 
 .topbar {
   display: grid;
-  grid-template-columns: 260px minmax(280px, 1fr) auto auto auto;
+  grid-template-columns: 244px minmax(260px, 1fr) auto auto auto auto;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   padding: 12px;
 }
 
@@ -160,6 +160,7 @@ button:disabled {
 .actions,
 .notes-actions,
 .output-switch,
+.answer-mode-switch,
 .stepper {
   display: flex;
   align-items: center;
@@ -197,6 +198,39 @@ button:disabled {
   padding: 4px;
   border-radius: 8px;
   background: var(--surface-2);
+}
+
+.answer-mode-switch {
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.answer-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.answer-mode-switch button.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 8px 18px rgba(23, 25, 29, 0.08);
 }
 
 .output-switch button {
@@ -867,6 +901,7 @@ meter {
 
   .status-strip,
   .actions,
+  .answer-mode-switch,
   .output-switch {
     justify-content: flex-start;
   }

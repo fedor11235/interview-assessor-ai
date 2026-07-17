@@ -1,4 +1,4 @@
-import type { InsightCard, InterviewMode, OutputMode, TranscriptItem } from './session'
+import type { InsightCard, InterviewMode, OutputMode, QuestionMode, TranscriptItem } from './session'
 
 export type AssistantApiStatus = 'idle' | 'thinking' | 'online' | 'offline'
 
@@ -10,6 +10,7 @@ export interface AssistantApiState {
 export interface AssistantApiRequest {
   sessionId: string
   mode: InterviewMode
+  questionMode: QuestionMode
   outputMode: OutputMode
   signal: TranscriptItem & {
     imageDataUrl?: string

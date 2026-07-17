@@ -2,6 +2,8 @@ export type InterviewMode = 'oral' | 'screen-text' | 'coding'
 
 export type OutputMode = 'overlay' | 'audio' | 'both'
 
+export type QuestionMode = 'test' | 'question'
+
 export type SignalSource = 'microphone' | 'screen' | 'manual'
 
 export interface TranscriptItem {
@@ -40,6 +42,11 @@ export const modeLabels: Record<InterviewMode, string> = {
   oral: 'Устный',
   'screen-text': 'Текстовый',
   coding: 'Кодинг'
+}
+
+export const questionModeLabels: Record<QuestionMode, string> = {
+  test: 'Тест',
+  question: 'Вопрос'
 }
 
 const starterInsights: InsightCard[] = [

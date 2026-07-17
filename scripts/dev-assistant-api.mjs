@@ -101,11 +101,12 @@ server.listen(port, () => {
 
 async function createLocalAnswer(payload) {
   const signal = payload?.signal || {}
+  const questionMode = payload?.questionMode === 'question' ? 'question' : 'test'
   const imageDataUrl = typeof signal.imageDataUrl === 'string' ? signal.imageDataUrl : ''
   const ocrText = imageDataUrl && localOcrEnabled ? await recognizeTextFromDataUrl(imageDataUrl).catch(() => '') : ''
   const text = (ocrText || String(signal.text || '')).trim()
   const model = ocrText ? 'local-ocr' : 'local-rules'
-  const insights = createLocalInsights(text, Boolean(imageDataUrl), Boolean(ocrText))
+  const insights = createLocalInsights(text, Boolean(imageDataUrl), Boolean(ocrText), questionMode)
 
   return {
     observedText: text || 'Локально: входной сигнал получен, но текст не распознан.',
@@ -114,8 +115,12 @@ async function createLocalAnswer(payload) {
   }
 }
 
-function createLocalInsights(text, hasImage, hasOcrText) {
+function createLocalInsights(text, hasImage, hasOcrText, questionMode) {
   const lower = text.toLowerCase()
+
+  if (questionMode === 'test') {
+    return createLocalTestInsights(text, hasImage, hasOcrText)
+  }
 
   if (
     lower.includes('функциональ') &&
@@ -201,6 +206,113 @@ function createLocalInsights(text, hasImage, hasOcrText) {
   ]
 }
 
+function createLocalTestInsights(text, hasImage, hasOcrText) {
+  const lower = text.toLowerCase()
+
+  if (
+    lower.includes('регрессион') &&
+    (lower.includes('исправлен') || lower.includes('исправления')) &&
+    (lower.includes('баг') || lower.includes('дефект'))
+  ) {
+    const option =
+      findOption(text, ['подтверждающ', 'дефект', 'регрес']) ||
+      'Провести подтверждающее тестирование дефекта и запустить регрессию'
+
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: верный вариант',
+        body: `Выбери: «${option}». После фикса сначала подтверждают, что конкретный дефект исправлен, затем запускают регрессию по затронутой области, чтобы проверить, что не сломалось существующее поведение.`,
+        confidence: 0.86
+      }
+    ]
+  }
+
+  if (
+    lower.includes('функциональ') &&
+    lower.includes('тест') &&
+    (lower.includes('уров') || lower.includes('level'))
+  ) {
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: верный вариант',
+        body:
+          'Выбери вариант про все уровни. Функциональное тестирование может выполняться на компонентном, интеграционном, системном и приемочном уровнях.',
+        confidence: 0.82
+      }
+    ]
+  }
+
+  if (hasImage && hasOcrText) {
+    const options = extractLikelyOptions(text)
+    const optionHint = options.length ? ` Варианты вижу: ${options.slice(0, 4).join(' | ')}.` : ''
+
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: тест прочитан',
+        body:
+          `OCR прочитал вопрос, но локальные правила не знают точный ответ.${optionHint} Для точного выбора нужен OpenAI ключ или вставь вопрос вручную, если это известный кейс.`,
+        confidence: 0.5
+      }
+    ]
+  }
+
+  if (hasImage) {
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: тест не прочитан',
+        body:
+          'Кадр дошел до API, но OCR не смог прочитать варианты. Увеличь масштаб страницы или вставь текст вопроса вручную.',
+        confidence: 0.46
+      }
+    ]
+  }
+
+  return [
+    {
+      kind: 'summary',
+      title: 'Локально: тест',
+      body: text || 'Вставь текст вопроса и вариантов, чтобы локальный режим попробовал выбрать ответ.',
+      confidence: 0.55
+    }
+  ]
+}
+
+function findOption(text, fragments) {
+  return extractLikelyOptions(text).find((option) => {
+    const lower = option.toLowerCase()
+    return fragments.every((fragment) => lower.includes(fragment))
+  })
+}
+
+function extractLikelyOptions(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^[•·*+\-\u25cb\u25ef\s]+/, '')
+        .replace(/^[A-ZА-Я]\s*[).:-]\s*/i, '')
+        .replace(/^\d+\s*[).:-]\s*/, '')
+        .trim()
+    )
+    .filter(Boolean)
+
+  return lines.filter((line) => {
+    const lower = line.toLowerCase()
+    return (
+      line.length >= 18 &&
+      !lower.includes('http') &&
+      !lower.includes('assessment') &&
+      !lower.includes('finish update') &&
+      !lower.includes('заверш') &&
+      !lower.includes('регрессионное тестирование')
+    )
+  })
+}
+
 async function recognizeTextFromDataUrl(dataUrl) {
   const imageBuffer = imageBufferFromDataUrl(dataUrl)
   if (!imageBuffer) {
@@ -263,7 +375,8 @@ async function callResponsesApi(payload, model) {
       text: [
         'Проанализируй сигнал интервьюера или экзаменатора.',
         'Если приложен скриншот окна, прочитай видимый вопрос, варианты ответа, условие или код прямо с изображения.',
-        'Верни краткий полезный ответ на русском: для тестового вопроса дай правильный вариант и короткое объяснение; для интервью дай эталонный ответ, подсказку или follow-up для интервьюера.',
+        'Если questionMode = test, выбери лучший вариант из видимых вариантов и начни ответ с "Выбери: ...". Если questionMode = question, напиши ответ, который человек мог бы ввести руками.',
+        'Верни краткий полезный ответ на русском: для тестового вопроса дай правильный вариант и короткое объяснение; для открытого вопроса дай готовый текст ответа.',
         'Работай только как consent-first инструмент для человека, который проводит интервью или экзамен. Не помогай с обходом прокторинга, скрытым списыванием или недобросовестным использованием.',
         '',
         JSON.stringify(sanitizedPayload, null, 2)
@@ -379,6 +492,7 @@ function sanitizePayloadForPrompt(payload) {
       confidence: signal.confidence,
       hasImage: Boolean(signal.imageDataUrl)
     },
+    questionMode: payload?.questionMode === 'question' ? 'question' : 'test',
     recentTranscript: Array.isArray(payload?.context?.recentTranscript)
       ? payload.context.recentTranscript.slice(0, 8).map((item) => ({
           source: item.source,

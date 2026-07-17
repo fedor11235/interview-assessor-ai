@@ -30,6 +30,7 @@ import {
   type InsightCard,
   type InterviewMode,
   type OutputMode,
+  type QuestionMode,
   type TranscriptItem
 } from './lib/session'
 import {
@@ -57,6 +58,7 @@ const idleApiState: AssistantApiState = {
 
 interface OverlaySnapshot {
   mode: InterviewMode
+  questionMode: QuestionMode
   outputMode: OutputMode
   capture: CaptureState
   apiState: AssistantApiState
@@ -69,6 +71,7 @@ interface OverlaySnapshot {
 export function App() {
   const isOverlay = window.location.hash.includes('/overlay')
   const [mode, setMode] = useState<InterviewMode>('oral')
+  const [questionMode, setQuestionMode] = useState<QuestionMode>('test')
   const [outputMode, setOutputMode] = useState<OutputMode>('overlay')
   const [apiState, setApiState] = useState<AssistantApiState>(idleApiState)
   const [consentAccepted, setConsentAccepted] = useState(false)
@@ -87,6 +90,7 @@ export function App() {
   const transcriptRef = useRef<TranscriptItem[]>(initialTranscript)
   const outputModeRef = useRef<OutputMode>('overlay')
   const modeRef = useRef<InterviewMode>('oral')
+  const questionModeRef = useRef<QuestionMode>('test')
   const requestSeqRef = useRef(0)
   const sessionIdRef = useRef(crypto.randomUUID())
 
@@ -101,12 +105,13 @@ export function App() {
   const exportPayload = useMemo(
     () => ({
       mode,
+      questionMode,
       outputMode,
       createdAt: new Date().toISOString(),
       transcript,
       insights
     }),
-    [insights, mode, outputMode, transcript]
+    [insights, mode, outputMode, questionMode, transcript]
   )
 
   useEffect(() => {
@@ -132,6 +137,10 @@ export function App() {
   }, [mode])
 
   useEffect(() => {
+    questionModeRef.current = questionMode
+  }, [questionMode])
+
+  useEffect(() => {
     if (isOverlay || !capture.running) {
       return
     }
@@ -155,6 +164,7 @@ export function App() {
       }
 
       setMode(snapshot.mode)
+      setQuestionMode(isQuestionMode(snapshot.questionMode) ? snapshot.questionMode : 'test')
       setOutputMode(isOutputMode(snapshot.outputMode) ? snapshot.outputMode : 'overlay')
       setCapture(snapshot.capture)
       setApiState(isApiState(snapshot.apiState) ? snapshot.apiState : idleApiState)
@@ -181,6 +191,7 @@ export function App() {
     isOverlay,
     mode,
     outputMode,
+    questionMode,
     selectedSourceId,
     systemPickedSourceName,
     transcript
@@ -239,6 +250,7 @@ export function App() {
       const answer = await requestAssistantAnswer({
         sessionId: sessionIdRef.current,
         mode: modeRef.current,
+        questionMode: questionModeRef.current,
         outputMode: outputModeRef.current,
         signal: { ...item, imageDataUrl },
         context: {
@@ -351,6 +363,7 @@ export function App() {
   function createOverlaySnapshot(): OverlaySnapshot {
     return {
       mode,
+      questionMode,
       outputMode,
       capture,
       apiState,
@@ -510,6 +523,7 @@ export function App() {
     <main className="app-shell">
       <TopBar
         mode={mode}
+        questionMode={questionMode}
         outputMode={outputMode}
         capture={capture}
         apiState={apiState}
@@ -520,6 +534,7 @@ export function App() {
           }
           setMode(nextMode)
         }}
+        onQuestionModeChange={setQuestionMode}
         onOutputModeChange={setOutputMode}
         onStart={startCapture}
         onStop={stopCapture}
@@ -657,6 +672,10 @@ function isOverlaySnapshot(value: unknown): value is OverlaySnapshot {
 
 function isOutputMode(value: unknown): value is OutputMode {
   return value === 'overlay' || value === 'audio' || value === 'both'
+}
+
+function isQuestionMode(value: unknown): value is QuestionMode {
+  return value === 'test' || value === 'question'
 }
 
 function isApiState(value: unknown): value is AssistantApiState {

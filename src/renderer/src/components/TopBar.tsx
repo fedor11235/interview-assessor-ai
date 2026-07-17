@@ -1,7 +1,9 @@
 import {
   AudioLines,
   Cloud,
+  FileQuestionMark,
   Headphones,
+  ListChecks,
   MonitorUp,
   PanelTopOpen,
   PanelsTopLeft,
@@ -10,16 +12,18 @@ import {
 } from 'lucide-react'
 import appIcon from '../../../../assets/app-icon.svg'
 import type { AssistantApiState } from '../lib/assistantApi'
-import type { CaptureState, InterviewMode, OutputMode } from '../lib/session'
-import { modeLabels } from '../lib/session'
+import type { CaptureState, InterviewMode, OutputMode, QuestionMode } from '../lib/session'
+import { modeLabels, questionModeLabels } from '../lib/session'
 
 interface TopBarProps {
   mode: InterviewMode
+  questionMode: QuestionMode
   outputMode: OutputMode
   capture: CaptureState
   apiState: AssistantApiState
   consentAccepted: boolean
   onModeChange: (mode: InterviewMode) => void
+  onQuestionModeChange: (mode: QuestionMode) => void
   onOutputModeChange: (mode: OutputMode) => void
   onStart: () => void
   onStop: () => void
@@ -28,11 +32,13 @@ interface TopBarProps {
 
 export function TopBar({
   mode,
+  questionMode,
   outputMode,
   capture,
   apiState,
   consentAccepted,
   onModeChange,
+  onQuestionModeChange,
   onOutputModeChange,
   onStart,
   onStop,
@@ -63,6 +69,24 @@ export function TopBar({
             {modeLabels[item]}
           </button>
         ))}
+      </nav>
+
+      <nav className="answer-mode-switch" aria-label="Answer format">
+        {(['test', 'question'] as QuestionMode[]).map((item) => {
+          const Icon = item === 'test' ? ListChecks : FileQuestionMark
+          return (
+            <button
+              type="button"
+              className={item === questionMode ? 'active' : ''}
+              key={item}
+              onClick={() => onQuestionModeChange(item)}
+              title={questionModeLabels[item]}
+            >
+              <Icon size={16} aria-hidden="true" />
+              <span>{questionModeLabels[item]}</span>
+            </button>
+          )
+        })}
       </nav>
 
       <div className="output-switch" aria-label="Answer output mode">
