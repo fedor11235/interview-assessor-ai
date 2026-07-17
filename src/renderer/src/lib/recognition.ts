@@ -15,9 +15,26 @@ export function supportsBrowserSpeechRecognition(): boolean {
   return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
 }
 
-export async function startScreenCapture(): Promise<MediaStream> {
-  if (!navigator.mediaDevices?.getDisplayMedia) {
+export async function startScreenCapture(sourceId?: string): Promise<MediaStream> {
+  if (!navigator.mediaDevices) {
     throw new Error('Screen capture is not available in this environment.')
+  }
+
+  if (sourceId) {
+    return navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: sourceId,
+          maxFrameRate: 12
+        }
+      } as unknown as MediaTrackConstraints
+    })
+  }
+
+  if (!navigator.mediaDevices.getDisplayMedia) {
+    throw new Error('Screen capture picker is not available in this environment.')
   }
 
   return navigator.mediaDevices.getDisplayMedia({
@@ -112,4 +129,3 @@ export function extractFrameDeltaScore(previous?: ImageData, next?: ImageData): 
 
   return changed / (next.data.length / step)
 }
-

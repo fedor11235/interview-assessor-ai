@@ -3,12 +3,24 @@
 interface Window {
   assessor?: {
     platform: NodeJS.Platform
+    listCaptureSources: () => Promise<CaptureSourceDescriptor[]>
     openOverlay: () => Promise<void>
     closeOverlay: () => Promise<void>
+    getOverlaySnapshot: () => Promise<unknown>
+    updateOverlay: (snapshot: unknown) => Promise<void>
+    onOverlaySnapshot: (callback: (snapshot: unknown) => void) => () => void
     setOverlayPassThrough: (enabled: boolean) => Promise<void>
   }
   webkitSpeechRecognition?: SpeechRecognitionConstructor
   SpeechRecognition?: SpeechRecognitionConstructor
+}
+
+interface CaptureSourceDescriptor {
+  id: string
+  name: string
+  kind: 'window' | 'screen'
+  thumbnail: string
+  appIcon?: string
 }
 
 interface SpeechRecognitionConstructor {

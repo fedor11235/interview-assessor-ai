@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +8,15 @@ const __dirname = dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
+let latestOverlaySnapshot: unknown = null
+
+interface CaptureSourceDescriptor {
+  id: string
+  name: string
+  kind: 'window' | 'screen'
+  thumbnail: string
+  appIcon?: string
+}
 
 function rendererEntry(hash?: string): { url?: string; file?: string; hash?: string } {
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -73,13 +82,20 @@ function createMainWindow(): void {
 
 function createOverlayWindow(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
+    sendOverlaySnapshot()
     overlayWindow.focus()
     return
   }
 
+  const { workArea } = screen.getPrimaryDisplay()
+  const width = 430
+  const height = 620
+
   overlayWindow = new BrowserWindow({
-    width: 420,
-    height: 560,
+    width,
+    height,
+    x: workArea.x + workArea.width - width - 24,
+    y: workArea.y + 72,
     minWidth: 360,
     minHeight: 420,
     frame: false,
@@ -97,19 +113,50 @@ function createOverlayWindow(): void {
     }
   })
 
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  overlayWindow.setFullScreenable(false)
   overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+  overlayWindow.webContents.once('did-finish-load', () => sendOverlaySnapshot())
   loadRenderer(overlayWindow, '/overlay')
+  overlayWindow.showInactive()
 
   overlayWindow.on('closed', () => {
     overlayWindow = null
   })
 }
 
+function sendOverlaySnapshot(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed() && latestOverlaySnapshot) {
+    overlayWindow.webContents.send('overlay:snapshot', latestOverlaySnapshot)
+  }
+}
+
 app.whenReady().then(() => {
   setDockIcon()
 
+  ipcMain.handle('capture:list-sources', async (): Promise<CaptureSourceDescriptor[]> => {
+    const sources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
+      fetchWindowIcons: true,
+      thumbnailSize: { width: 320, height: 200 }
+    })
+
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      kind: source.id.startsWith('screen:') ? 'screen' : 'window',
+      thumbnail: source.thumbnail.toDataURL(),
+      appIcon: source.appIcon?.toDataURL()
+    }))
+  })
+
   ipcMain.handle('overlay:open', () => createOverlayWindow())
   ipcMain.handle('overlay:close', () => overlayWindow?.close())
+  ipcMain.handle('overlay:get-snapshot', () => latestOverlaySnapshot)
+  ipcMain.handle('overlay:update', (_event, snapshot: unknown) => {
+    latestOverlaySnapshot = snapshot
+    sendOverlaySnapshot()
+  })
   ipcMain.handle('overlay:set-pass-through', (_event, enabled: boolean) => {
     overlayWindow?.setIgnoreMouseEvents(enabled, { forward: true })
   })
