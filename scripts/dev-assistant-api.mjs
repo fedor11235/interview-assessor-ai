@@ -1,10 +1,14 @@
 import { createServer } from 'node:http'
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { dirname, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const execFileAsync = promisify(execFile)
 const fileEnv = {
   ...readEnvFile(resolve(projectRoot, '.env')),
   ...readEnvFile(resolve(projectRoot, '.env.local'))
@@ -13,6 +17,11 @@ const env = { ...fileEnv, ...process.env }
 const port = Number(env.ASSISTANT_API_PORT || 3011)
 const apiToken = env.ASSISTANT_API_TOKEN || ''
 const devDemoEnabled = env.ENABLE_DEV_DEMO_API !== 'false'
+const localOcrEnabled =
+  env.ENABLE_LOCAL_OCR !== 'false' &&
+  process.platform === 'darwin' &&
+  existsSync('/usr/bin/swift') &&
+  existsSync(resolve(projectRoot, 'scripts/local-ocr.swift'))
 const explicitModel = Boolean(env.OPENAI_MODEL)
 const modelCandidates = explicitModel ? [env.OPENAI_MODEL] : ['gpt-5-mini', 'gpt-4.1-mini']
 
@@ -32,6 +41,7 @@ const server = createServer(async (request, response) => {
       ok: true,
       hasOpenAiKey: Boolean(env.OPENAI_API_KEY),
       demoMode: !env.OPENAI_API_KEY && devDemoEnabled,
+      localOcr: localOcrEnabled,
       model: modelCandidates[0]
     })
     return
@@ -59,9 +69,9 @@ const server = createServer(async (request, response) => {
         return
       }
 
+      const localAnswer = await createLocalAnswer(payload)
       sendJson(response, 200, {
-        ...createDemoAnswer(payload),
-        model: 'local-demo',
+        ...localAnswer,
         latencyMs: Date.now() - startedAt
       })
       return
@@ -85,63 +95,141 @@ server.listen(port, () => {
   console.log(
     env.OPENAI_API_KEY
       ? `OpenAI model: ${modelCandidates[0]}`
-      : 'OPENAI_API_KEY is missing; local demo answers are enabled.'
+      : `OPENAI_API_KEY is missing; local mode is enabled (${localOcrEnabled ? 'OCR + rules' : 'rules only'}).`
   )
 })
 
-function createDemoAnswer(payload) {
+async function createLocalAnswer(payload) {
   const signal = payload?.signal || {}
-  const text = String(signal.text || '')
+  const imageDataUrl = typeof signal.imageDataUrl === 'string' ? signal.imageDataUrl : ''
+  const ocrText = imageDataUrl && localOcrEnabled ? await recognizeTextFromDataUrl(imageDataUrl).catch(() => '') : ''
+  const text = (ocrText || String(signal.text || '')).trim()
+  const model = ocrText ? 'local-ocr' : 'local-rules'
+  const insights = createLocalInsights(text, Boolean(imageDataUrl), Boolean(ocrText))
+
+  return {
+    observedText: text || 'Локально: входной сигнал получен, но текст не распознан.',
+    insights: insights.map(normalizeInsight).filter(Boolean),
+    model
+  }
+}
+
+function createLocalInsights(text, hasImage, hasOcrText) {
   const lower = text.toLowerCase()
-  const hasImage = Boolean(signal.imageDataUrl)
 
   if (
     lower.includes('функциональ') &&
     lower.includes('тест') &&
     (lower.includes('уров') || lower.includes('level'))
   ) {
-    return {
-      observedText: text,
-      insights: [
-        normalizeInsight({
-          kind: 'summary',
-          title: 'Demo: правильный вариант',
-          body:
-            'Функциональное тестирование может выполняться на всех уровнях тестирования: компонентном, интеграционном, системном и приемочном.',
-          confidence: 0.82
-        })
-      ].filter(Boolean)
-    }
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: правильный вариант',
+        body:
+          'Функциональное тестирование может выполняться на всех уровнях тестирования: компонентном, интеграционном, системном и приемочном.',
+        confidence: 0.82
+      }
+    ]
+  }
+
+  if (lower.includes('sla') || lower.includes('latency') || lower.includes('p95')) {
+    return [
+      {
+        kind: 'follow-up',
+        title: 'Локально: проверь SLA',
+        body: 'Уточни метрику, источник измерения, допустимый процент ошибок и поведение системы при нарушении SLA.',
+        confidence: 0.76
+      }
+    ]
+  }
+
+  if (lower.includes('edge case') || lower.includes('краев') || lower.includes('гранич')) {
+    return [
+      {
+        kind: 'risk',
+        title: 'Локально: edge cases',
+        body: 'Попроси назвать минимальный набор граничных входов и ожидаемый результат для каждого случая.',
+        confidence: 0.76
+      }
+    ]
+  }
+
+  if (lower.includes('индекс') || lower.includes('таблиц') || lower.includes('sql')) {
+    return [
+      {
+        kind: 'rubric',
+        title: 'Локально: хранилище',
+        body: 'Проверь, связывает ли кандидат индекс с реальным query pattern, кардинальностью и объемом данных.',
+        confidence: 0.74
+      }
+    ]
+  }
+
+  if (hasImage && hasOcrText) {
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: OCR прочитал текст',
+        body: `Распознал текст с выбранного окна: ${truncateText(text, 360)}`,
+        confidence: 0.68
+      }
+    ]
   }
 
   if (hasImage) {
-    return {
-      observedText: 'Demo mode: кадр выбранного окна получен. Для чтения текста с картинки добавь OPENAI_API_KEY.',
-      insights: [
-        normalizeInsight({
-          kind: 'summary',
-          title: 'Demo: кадр получен',
-          body:
-            'Цепочка работает: приложение захватило выбранное окно, отправило кадр на локальный API и получило ответ. Для настоящего анализа текста с экрана нужен OPENAI_API_KEY.',
-          confidence: 0.72
-        })
-      ].filter(Boolean)
-    }
+    return [
+      {
+        kind: 'summary',
+        title: 'Локально: кадр получен',
+        body:
+          'Кадр выбранного окна дошел до API, но локальный OCR не смог уверенно прочитать текст. Увеличь окно/масштаб страницы или вставь вопрос вручную.',
+        confidence: 0.58
+      }
+    ]
   }
 
-  return {
-    observedText: text || 'Demo mode: входной сигнал получен.',
-    insights: [
-      normalizeInsight({
-        kind: 'summary',
-        title: 'Demo: сигнал обработан',
-        body:
-          text.trim() ||
-          'Локальный API отвечает без OpenAI ключа. Можно проверить оверлей, звук, статусы и скорость обновления интерфейса.',
-        confidence: 0.72
-      })
-    ].filter(Boolean)
+  return [
+    {
+      kind: 'summary',
+      title: 'Локально: сигнал обработан',
+      body:
+        text ||
+        'Локальный API работает без внешнего ключа. Для ручной проверки вставь текст вопроса в поле сигнала.',
+      confidence: 0.68
+    }
+  ]
+}
+
+async function recognizeTextFromDataUrl(dataUrl) {
+  const imageBuffer = imageBufferFromDataUrl(dataUrl)
+  if (!imageBuffer) {
+    return ''
   }
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'interview-assessor-ocr-'))
+  const imagePath = join(tempDir, 'frame.jpg')
+
+  try {
+    writeFileSync(imagePath, imageBuffer)
+    const { stdout } = await execFileAsync('/usr/bin/swift', [resolve(projectRoot, 'scripts/local-ocr.swift'), imagePath], {
+      timeout: 15000,
+      maxBuffer: 1024 * 1024
+    })
+    const output = JSON.parse(stdout)
+    return typeof output.text === 'string' ? output.text.trim() : ''
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+function imageBufferFromDataUrl(dataUrl) {
+  const match = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/i.exec(dataUrl)
+  if (!match) {
+    return undefined
+  }
+
+  return Buffer.from(match[1], 'base64')
 }
 
 async function askOpenAi(payload) {

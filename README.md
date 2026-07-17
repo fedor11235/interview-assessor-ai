@@ -33,7 +33,7 @@ npm run api:dev
 
 The Electron renderer sends signals to `VITE_ASSISTANT_API_URL`, which defaults to `http://localhost:3011/api/answer`. The local API keeps `OPENAI_API_KEY` server-side and returns the same answer shape a production backend can return.
 
-If `OPENAI_API_KEY` is empty, the local API returns `local-demo` answers with `200 OK` so the capture, overlay, audio, and status flow can be tested without a real model. Set `ENABLE_DEV_DEMO_API=false` to make missing keys fail loudly again.
+If `OPENAI_API_KEY` is empty, the local API still works locally. On macOS it uses the built-in Vision OCR (`ENABLE_LOCAL_OCR=true`) to read text from the selected-window frame, then returns local rule-based guidance with `200 OK`. Set `OPENAI_API_KEY` later when you want model reasoning instead of local OCR/rules.
 
 Build the app:
 
@@ -59,6 +59,12 @@ Text mode:
 
 ```text
 selected window frames -> frame diff -> local API -> vision/text model -> AI answer
+```
+
+Local development without an API key:
+
+```text
+selected window frames -> local API -> macOS Vision OCR -> local rules -> overlay/audio answer
 ```
 
 Production adapters:
