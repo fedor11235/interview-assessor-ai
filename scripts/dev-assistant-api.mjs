@@ -208,6 +208,23 @@ function createLocalInsights(text, hasImage, hasOcrText, questionMode) {
 
 function createLocalTestInsights(text, hasImage, hasOcrText) {
   const lower = text.toLowerCase()
+  const options = extractLikelyOptions(text)
+
+  if (
+    lower.includes('регрессион') &&
+    (lower.includes('особенно важ') || lower.includes('когда проведение'))
+  ) {
+    const option =
+      findOptionFromOptions(options, ['исправ', 'дефект']) ||
+      findOptionFromOptions(options, ['модификац', 'функцион'])
+
+    if (option) {
+      return createOptionAnswer(
+        option,
+        'Регрессионное тестирование особенно важно после исправления дефектов и изменений функционала: оно проверяет, что существующее поведение не сломалось.'
+      )
+    }
+  }
 
   if (
     lower.includes('регрессион') &&
@@ -215,17 +232,15 @@ function createLocalTestInsights(text, hasImage, hasOcrText) {
     (lower.includes('баг') || lower.includes('дефект'))
   ) {
     const option =
-      findOption(text, ['подтверждающ', 'дефект', 'регрес']) ||
-      'Провести подтверждающее тестирование дефекта и запустить регрессию'
+      findOptionFromOptions(options, ['подтверждающ', 'дефект', 'регрес']) ||
+      findOptionFromOptions(options, ['исправ', 'дефект'])
 
-    return [
-      {
-        kind: 'summary',
-        title: 'Локально: верный вариант',
-        body: `Выбери: «${option}». После фикса сначала подтверждают, что конкретный дефект исправлен, затем запускают регрессию по затронутой области, чтобы проверить, что не сломалось существующее поведение.`,
-        confidence: 0.86
-      }
-    ]
+    if (option) {
+      return createOptionAnswer(
+        option,
+        'После фикса сначала подтверждают, что конкретный дефект исправлен, затем проверяют затронутую область регрессией.'
+      )
+    }
   }
 
   if (
@@ -233,28 +248,28 @@ function createLocalTestInsights(text, hasImage, hasOcrText) {
     lower.includes('тест') &&
     (lower.includes('уров') || lower.includes('level'))
   ) {
-    return [
-      {
-        kind: 'summary',
-        title: 'Локально: верный вариант',
-        body:
-          'Выбери вариант про все уровни. Функциональное тестирование может выполняться на компонентном, интеграционном, системном и приемочном уровнях.',
-        confidence: 0.82
-      }
-    ]
+    const option =
+      findOptionFromOptions(options, ['все', 'уров']) ||
+      findOptionFromOptions(options, ['компонент', 'интеграц'])
+
+    if (option) {
+      return createOptionAnswer(
+        option,
+        'Функциональное тестирование может выполняться на компонентном, интеграционном, системном и приемочном уровнях.'
+      )
+    }
   }
 
   if (hasImage && hasOcrText) {
-    const options = extractLikelyOptions(text)
     const optionHint = options.length ? ` Варианты вижу: ${options.slice(0, 4).join(' | ')}.` : ''
 
     return [
       {
         kind: 'summary',
-        title: 'Локально: тест прочитан',
+        title: 'Локально: не уверен',
         body:
-          `OCR прочитал вопрос, но локальные правила не знают точный ответ.${optionHint} Для точного выбора нужен OpenAI ключ или вставь вопрос вручную, если это известный кейс.`,
-        confidence: 0.5
+          `OCR прочитал тест, но локальные правила не нашли надежный ответ среди текущих вариантов.${optionHint}`,
+        confidence: 0.42
       }
     ]
   }
@@ -281,8 +296,19 @@ function createLocalTestInsights(text, hasImage, hasOcrText) {
   ]
 }
 
-function findOption(text, fragments) {
-  return extractLikelyOptions(text).find((option) => {
+function createOptionAnswer(option, explanation) {
+  return [
+    {
+      kind: 'summary',
+      title: 'Локально: верный вариант',
+      body: `Выбери: «${option}». ${explanation}`,
+      confidence: 0.86
+    }
+  ]
+}
+
+function findOptionFromOptions(options, fragments) {
+  return options.find((option) => {
     const lower = option.toLowerCase()
     return fragments.every((fragment) => lower.includes(fragment))
   })
@@ -307,6 +333,14 @@ function extractLikelyOptions(text) {
       !lower.includes('http') &&
       !lower.includes('assessment') &&
       !lower.includes('finish update') &&
+      !lower.includes('ai ответ') &&
+      !lower.includes('ai ответы') &&
+      !lower.includes('выбранное окно') &&
+      !lower.includes('local-ocr') &&
+      !lower.includes('локально:') &&
+      !lower.includes('выбери:') &&
+      !lower.includes('после фикса') &&
+      !lower.startsWith('#') &&
       !lower.includes('заверш') &&
       !lower.includes('регрессионное тестирование')
     )

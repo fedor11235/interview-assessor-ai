@@ -56,6 +56,12 @@ const idleApiState: AssistantApiState = {
   message: 'API готов к локальному серверу'
 }
 
+interface PendingFrame {
+  item: TranscriptItem
+  imageDataUrl: string
+  token: number
+}
+
 interface OverlaySnapshot {
   mode: InterviewMode
   questionMode: QuestionMode
@@ -93,6 +99,9 @@ export function App() {
   const questionModeRef = useRef<QuestionMode>('test')
   const requestSeqRef = useRef(0)
   const sessionIdRef = useRef(crypto.randomUUID())
+  const screenAnalysisInFlightRef = useRef(false)
+  const pendingScreenFrameRef = useRef<PendingFrame | null>(null)
+  const latestScreenTokenRef = useRef(0)
 
   useEffect(() => {
     document.body.dataset.route = isOverlay ? 'overlay' : 'app'
@@ -236,11 +245,38 @@ export function App() {
     }
   }
 
-  async function appendSignal(item: TranscriptItem, imageDataUrl?: string): Promise<void> {
-    const previousTranscript = transcriptRef.current
-    const nextTranscript = [item, ...previousTranscript].slice(0, 80)
+  function queueScreenFrame(item: TranscriptItem, imageDataUrl: string): void {
+    const token = latestScreenTokenRef.current + 1
+    latestScreenTokenRef.current = token
+    transcriptRef.current = [item]
+    setTranscript([item])
+    setInsights([])
+
+    if (screenAnalysisInFlightRef.current) {
+      pendingScreenFrameRef.current = { item, imageDataUrl, token }
+      setApiState({
+        status: 'thinking',
+        message: 'Новый кадр найден. Старый ответ будет проигнорирован.'
+      })
+      return
+    }
+
+    void appendSignal(item, imageDataUrl, token)
+  }
+
+  async function appendSignal(item: TranscriptItem, imageDataUrl?: string, screenToken?: number): Promise<void> {
+    if (screenToken) {
+      screenAnalysisInFlightRef.current = true
+    }
+
+    const isScreenFrame = item.source === 'screen' && Boolean(imageDataUrl)
+    const previousTranscript = isScreenFrame ? [] : transcriptRef.current
+    const nextTranscript = isScreenFrame ? [item] : [item, ...previousTranscript].slice(0, 80)
     transcriptRef.current = nextTranscript
     setTranscript(nextTranscript)
+    if (isScreenFrame) {
+      setInsights([])
+    }
     setApiState({ status: 'thinking', message: 'Отправляю сигнал на локальный API...' })
 
     const requestId = requestSeqRef.current + 1
@@ -255,11 +291,14 @@ export function App() {
         signal: { ...item, imageDataUrl },
         context: {
           sourceName: getSelectedSourceName(),
-          recentTranscript: previousTranscript.slice(0, 10)
+          recentTranscript: isScreenFrame ? [] : previousTranscript.slice(0, 10)
         }
       })
 
-      if (requestSeqRef.current !== requestId) {
+      if (
+        requestSeqRef.current !== requestId ||
+        (screenToken && screenToken !== latestScreenTokenRef.current)
+      ) {
         return
       }
 
@@ -274,12 +313,15 @@ export function App() {
       })
       deliverInsight(nextInsights[0])
     } catch (error) {
-      if (requestSeqRef.current !== requestId) {
+      if (
+        requestSeqRef.current !== requestId ||
+        (screenToken && screenToken !== latestScreenTokenRef.current)
+      ) {
         return
       }
 
       const fallback = markFallback(createInsightFromSignal(item, modeRef.current))
-      setInsights((current) => [fallback, ...current].slice(0, 12))
+      setInsights((current) => (isScreenFrame ? [fallback] : [fallback, ...current].slice(0, 12)))
       setApiState({
         status: 'offline',
         message:
@@ -288,6 +330,16 @@ export function App() {
             : 'API недоступен, показан локальный fallback'
       })
       deliverInsight(fallback)
+    } finally {
+      if (screenToken) {
+        screenAnalysisInFlightRef.current = false
+        const pendingFrame = pendingScreenFrameRef.current
+
+        if (pendingFrame) {
+          pendingScreenFrameRef.current = null
+          void appendSignal(pendingFrame.item, pendingFrame.imageDataUrl, pendingFrame.token)
+        }
+      }
     }
   }
 
@@ -310,7 +362,7 @@ export function App() {
         handlesRef.current.screenAnalysisStop = startScreenFrameAnalysis(
           handlesRef.current.screenStream,
           mode,
-          (item, imageDataUrl) => void appendSignal(item, imageDataUrl),
+          queueScreenFrame,
           (message) => setCapture((current) => ({ ...current, error: message }))
         )
       }
@@ -351,6 +403,9 @@ export function App() {
   function stopCapture(): void {
     handlesRef.current.speechStop?.()
     handlesRef.current.screenAnalysisStop?.()
+    pendingScreenFrameRef.current = null
+    screenAnalysisInFlightRef.current = false
+    latestScreenTokenRef.current += 1
     stopMediaStream(handlesRef.current.screenStream)
     stopMediaStream(handlesRef.current.microphoneStream)
     stopSpeechOutput()

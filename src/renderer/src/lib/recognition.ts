@@ -107,7 +107,7 @@ export function startScreenFrameAnalysis(
   const video = document.createElement('video')
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  const intervalMs = Number(import.meta.env.VITE_SCREEN_ANALYSIS_INTERVAL_MS ?? 8000)
+  const intervalMs = Number(import.meta.env.VITE_SCREEN_ANALYSIS_INTERVAL_MS ?? 2500)
   let previousFrame: ImageData | undefined
   let intervalId: number | undefined
   let timeoutId: number | undefined
@@ -151,7 +151,7 @@ export function startScreenFrameAnalysis(
     .play()
     .then(() => {
       timeoutId = window.setTimeout(captureFrame, 900)
-      intervalId = window.setInterval(captureFrame, Number.isFinite(intervalMs) ? intervalMs : 8000)
+      intervalId = window.setInterval(captureFrame, Number.isFinite(intervalMs) ? intervalMs : 2500)
     })
     .catch((error) => {
       onError(error instanceof Error ? error.message : 'Не удалось прочитать кадр выбранного окна.')

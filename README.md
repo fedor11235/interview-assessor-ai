@@ -68,6 +68,8 @@ Local development without an API key:
 selected window frames -> local API -> macOS Vision OCR -> local rules -> overlay/audio answer
 ```
 
+Screen analysis is latest-only: each selected-window frame clears prior screen context, stale in-flight answers are ignored, and the default frame check interval is `2500 ms`.
+
 Production adapters:
 
 - macOS screen capture: ScreenCaptureKit.
