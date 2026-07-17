@@ -7,12 +7,14 @@ Consent-first desktop assistant for people who conduct interviews or exams. It c
 - Electron + React + TypeScript desktop app.
 - Main assessment console with interview modes: oral, text screen, coding.
 - Transparent always-on-top overlay window.
+- Output mode: overlay, audio, or both.
 - Custom macOS/Windows app icon.
 - Explicit window/screen source picker for text and coding modes.
 - Consent gate before capture starts.
 - Browser-based screen and microphone capture for the MVP.
+- Local dev assistant API that can call OpenAI and return production-like answers.
 - Pluggable recognition layer for real STT/OCR adapters.
-- JSON session export with transcript, insights, and rubric scores.
+- JSON session export with transcript and AI answers.
 
 ## Quick start
 
@@ -20,6 +22,16 @@ Consent-first desktop assistant for people who conduct interviews or exams. It c
 npm install
 npm run dev
 ```
+
+Run the local AI API in a second terminal:
+
+```bash
+cp .env.example .env.local
+# add OPENAI_API_KEY to .env.local
+npm run api:dev
+```
+
+The Electron renderer sends signals to `VITE_ASSISTANT_API_URL`, which defaults to `http://localhost:3011/api/answer`. The local API keeps `OPENAI_API_KEY` server-side and returns the same answer shape a production backend can return.
 
 Build the app:
 
@@ -44,7 +56,7 @@ microphone -> VAD/chunker -> streaming STT -> normalized transcript -> AI guidan
 Text mode:
 
 ```text
-screen frames -> frame diff -> OCR changed regions -> dedupe -> AI guidance
+selected window frames -> frame diff -> local API -> vision/text model -> AI answer
 ```
 
 Production adapters:

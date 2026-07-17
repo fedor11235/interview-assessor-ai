@@ -1,9 +1,10 @@
-import { createTranscriptItem, demoQuestions, type InterviewMode, type TranscriptItem } from './session'
+import { createTranscriptItem, type InterviewMode, type TranscriptItem } from './session'
 
 export interface CaptureHandles {
   screenStream?: MediaStream
   microphoneStream?: MediaStream
   speechStop?: () => void
+  screenAnalysisStop?: () => void
 }
 
 export interface RecognitionTick {
@@ -97,19 +98,76 @@ export function startBrowserSpeechRecognition(
   return () => recognition.stop()
 }
 
-export function createDemoRecognitionLoop(
+export function startScreenFrameAnalysis(
+  stream: MediaStream,
   mode: InterviewMode,
-  onTick: (tick: RecognitionTick) => void
+  onFrame: (item: TranscriptItem, imageDataUrl: string) => void,
+  onError: (message: string) => void
 ): () => void {
-  let index = 0
-  const interval = window.setInterval(() => {
-    const raw = demoQuestions[mode][index % demoQuestions[mode].length]
-    const item = createTranscriptItem(mode, raw)
-    onTick({ item, raw })
-    index += 1
-  }, 3600)
+  const video = document.createElement('video')
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  const intervalMs = Number(import.meta.env.VITE_SCREEN_ANALYSIS_INTERVAL_MS ?? 8000)
+  let previousFrame: ImageData | undefined
+  let intervalId: number | undefined
+  let timeoutId: number | undefined
+  let stopped = false
 
-  return () => window.clearInterval(interval)
+  video.muted = true
+  video.playsInline = true
+  video.srcObject = stream
+
+  const captureFrame = (): void => {
+    if (stopped || !context || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return
+    }
+
+    const sourceWidth = video.videoWidth
+    const sourceHeight = video.videoHeight
+
+    if (!sourceWidth || !sourceHeight) {
+      return
+    }
+
+    const maxWidth = 1280
+    const scale = Math.min(1, maxWidth / sourceWidth)
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    const nextFrame = context.getImageData(0, 0, canvas.width, canvas.height)
+    const delta = extractFrameDeltaScore(previousFrame, nextFrame)
+    previousFrame = nextFrame
+
+    if (delta < 0.006) {
+      return
+    }
+
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.72)
+    onFrame(createTranscriptItem(mode, 'Кадр выбранного окна отправлен на анализ.', 'screen'), imageDataUrl)
+  }
+
+  void video
+    .play()
+    .then(() => {
+      timeoutId = window.setTimeout(captureFrame, 900)
+      intervalId = window.setInterval(captureFrame, Number.isFinite(intervalMs) ? intervalMs : 8000)
+    })
+    .catch((error) => {
+      onError(error instanceof Error ? error.message : 'Не удалось прочитать кадр выбранного окна.')
+    })
+
+  return () => {
+    stopped = true
+    if (timeoutId) {
+      window.clearTimeout(timeoutId)
+    }
+    if (intervalId) {
+      window.clearInterval(intervalId)
+    }
+    video.pause()
+    video.srcObject = null
+  }
 }
 
 export function extractFrameDeltaScore(previous?: ImageData, next?: ImageData): number {

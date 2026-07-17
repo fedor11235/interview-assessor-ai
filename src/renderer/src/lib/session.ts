@@ -1,5 +1,7 @@
 export type InterviewMode = 'oral' | 'screen-text' | 'coding'
 
+export type OutputMode = 'overlay' | 'audio' | 'both'
+
 export type SignalSource = 'microphone' | 'screen' | 'manual'
 
 export interface TranscriptItem {
@@ -38,24 +40,6 @@ export const modeLabels: Record<InterviewMode, string> = {
   oral: 'Устный',
   'screen-text': 'Текстовый',
   coding: 'Кодинг'
-}
-
-export const demoQuestions: Record<InterviewMode, string[]> = {
-  oral: [
-    'Кандидат описывает прошлый опыт с очередями сообщений и вспоминает инцидент с потерей событий.',
-    'Звучит вопрос про компромиссы между latency, throughput и надежностью доставки.',
-    'Кандидат утверждает, что идемпотентность решалась через уникальный ключ операции.'
-  ],
-  'screen-text': [
-    'На экране задача: спроектировать сервис уведомлений с ретраями, дедупликацией и лимитами.',
-    'В условии появились SLA: p95 до 250 мс, 10k событий в минуту, хранение истории 30 дней.',
-    'Кандидат открыл схему таблиц и добавил индекс по user_id + created_at.'
-  ],
-  coding: [
-    'Кандидат написал функцию debounce и обсуждает, когда очищать таймер.',
-    'В тесте падает edge case с первым вызовом и trailing execution.',
-    'Кандидат предлагает разделить чистую логику и слой DOM-событий.'
-  ]
 }
 
 const starterInsights: InsightCard[] = [
@@ -119,6 +103,21 @@ export function createTranscriptItem(
 export function createInsightFromSignal(item: TranscriptItem, mode: InterviewMode): InsightCard {
   const lower = item.text.toLowerCase()
 
+  if (
+    lower.includes('функциональ') &&
+    lower.includes('тест') &&
+    (lower.includes('уров') || lower.includes('level'))
+  ) {
+    return {
+      id: crypto.randomUUID(),
+      kind: 'summary',
+      title: 'Верный вариант',
+      body:
+        'Функциональное тестирование может выполняться на всех уровнях тестирования: компонентном, интеграционном, системном и приемочном.',
+      confidence: 0.91
+    }
+  }
+
   if (lower.includes('sla') || lower.includes('latency') || lower.includes('p95')) {
     return {
       id: crypto.randomUUID(),
@@ -164,4 +163,3 @@ export function createInsightFromSignal(item: TranscriptItem, mode: InterviewMod
 export function getStarterInsights(): InsightCard[] {
   return starterInsights
 }
-

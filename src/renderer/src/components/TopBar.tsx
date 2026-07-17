@@ -1,13 +1,26 @@
-import { AudioLines, MonitorUp, PanelTopOpen, Square, WandSparkles } from 'lucide-react'
+import {
+  AudioLines,
+  Cloud,
+  Headphones,
+  MonitorUp,
+  PanelTopOpen,
+  PanelsTopLeft,
+  Square,
+  WandSparkles
+} from 'lucide-react'
 import appIcon from '../../../../assets/app-icon.svg'
-import type { CaptureState, InterviewMode } from '../lib/session'
+import type { AssistantApiState } from '../lib/assistantApi'
+import type { CaptureState, InterviewMode, OutputMode } from '../lib/session'
 import { modeLabels } from '../lib/session'
 
 interface TopBarProps {
   mode: InterviewMode
+  outputMode: OutputMode
   capture: CaptureState
+  apiState: AssistantApiState
   consentAccepted: boolean
   onModeChange: (mode: InterviewMode) => void
+  onOutputModeChange: (mode: OutputMode) => void
   onStart: () => void
   onStop: () => void
   onOpenOverlay: () => void
@@ -15,9 +28,12 @@ interface TopBarProps {
 
 export function TopBar({
   mode,
+  outputMode,
   capture,
+  apiState,
   consentAccepted,
   onModeChange,
+  onOutputModeChange,
   onStart,
   onStop,
   onOpenOverlay
@@ -49,6 +65,36 @@ export function TopBar({
         ))}
       </nav>
 
+      <div className="output-switch" aria-label="Answer output mode">
+        <button
+          type="button"
+          className={outputMode === 'overlay' ? 'active' : ''}
+          onClick={() => onOutputModeChange('overlay')}
+          aria-label="Показывать ответы оверлеем"
+          title="Оверлей"
+        >
+          <PanelTopOpen size={17} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={outputMode === 'audio' ? 'active' : ''}
+          onClick={() => onOutputModeChange('audio')}
+          aria-label="Озвучивать ответы"
+          title="Звук"
+        >
+          <Headphones size={17} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={outputMode === 'both' ? 'active' : ''}
+          onClick={() => onOutputModeChange('both')}
+          aria-label="Показывать и озвучивать ответы"
+          title="Оверлей и звук"
+        >
+          <PanelsTopLeft size={17} aria-hidden="true" />
+        </button>
+      </div>
+
       <div className="status-strip">
         <span className={capture.microphone ? 'status active' : 'status'}>
           <AudioLines size={15} aria-hidden="true" /> Mic
@@ -56,8 +102,17 @@ export function TopBar({
         <span className={capture.screen ? 'status active' : 'status'}>
           <MonitorUp size={15} aria-hidden="true" /> Screen
         </span>
-        <span className={capture.running ? 'status active' : 'status'}>
-          <WandSparkles size={15} aria-hidden="true" /> AI
+        <span
+          className={
+            apiState.status === 'online' || apiState.status === 'thinking'
+              ? 'status active'
+              : apiState.status === 'offline'
+                ? 'status warning'
+                : 'status'
+          }
+          title={apiState.message}
+        >
+          <Cloud size={15} aria-hidden="true" /> {apiLabel(apiState.status)}
         </span>
       </div>
 
@@ -79,4 +134,20 @@ export function TopBar({
       </div>
     </header>
   )
+}
+
+function apiLabel(status: AssistantApiState['status']): string {
+  if (status === 'thinking') {
+    return 'API...'
+  }
+
+  if (status === 'online') {
+    return 'API'
+  }
+
+  if (status === 'offline') {
+    return 'Fallback'
+  }
+
+  return 'API'
 }

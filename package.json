@@ -8,6 +8,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "api:dev": "node scripts/dev-assistant-api.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "build": "tsc --noEmit && electron-vite build",
     "preview": "electron-vite preview",

@@ -75,7 +75,7 @@ button:disabled {
 
 .topbar {
   display: grid;
-  grid-template-columns: 280px minmax(300px, 1fr) auto auto;
+  grid-template-columns: 260px minmax(280px, 1fr) auto auto auto;
   align-items: center;
   gap: 16px;
   padding: 12px;
@@ -159,6 +159,7 @@ button:disabled {
 .status-strip,
 .actions,
 .notes-actions,
+.output-switch,
 .stepper {
   display: flex;
   align-items: center;
@@ -183,6 +184,41 @@ button:disabled {
   border-color: rgba(14, 127, 121, 0.4);
   color: var(--teal);
   background: rgba(14, 127, 121, 0.1);
+}
+
+.status.warning {
+  border-color: rgba(185, 76, 55, 0.38);
+  color: var(--coral);
+  background: rgba(185, 76, 55, 0.1);
+}
+
+.output-switch {
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.output-switch button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.output-switch button.active {
+  color: var(--teal);
+  background: var(--surface);
+  box-shadow: 0 8px 18px rgba(23, 25, 29, 0.08);
 }
 
 .icon-button {
@@ -596,6 +632,28 @@ meter {
   outline-color: var(--teal);
 }
 
+.api-note {
+  margin: -4px 0 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(235, 229, 215, 0.56);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.api-note-online,
+.api-note-thinking {
+  color: var(--teal);
+  background: rgba(14, 127, 121, 0.1);
+}
+
+.api-note-offline {
+  color: var(--coral);
+  background: rgba(185, 76, 55, 0.1);
+}
+
 .notes-actions {
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -808,7 +866,8 @@ meter {
   }
 
   .status-strip,
-  .actions {
+  .actions,
+  .output-switch {
     justify-content: flex-start;
   }
 }

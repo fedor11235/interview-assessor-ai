@@ -14,31 +14,34 @@ import {
 } from 'lucide-react'
 import { ConsentBanner } from './components/ConsentBanner'
 import { InsightDeck } from './components/InsightDeck'
-import { RubricBoard } from './components/RubricBoard'
 import { SourcePicker } from './components/SourcePicker'
 import { TopBar } from './components/TopBar'
 import { TranscriptFeed } from './components/TranscriptFeed'
 import {
+  requestAssistantAnswer,
+  type AssistantApiState
+} from './lib/assistantApi'
+import {
   createInsightFromSignal,
   createTranscriptItem,
   getStarterInsights,
-  initialRubric,
   initialTranscript,
   type CaptureState,
   type InsightCard,
   type InterviewMode,
-  type RubricItem,
+  type OutputMode,
   type TranscriptItem
 } from './lib/session'
 import {
-  createDemoRecognitionLoop,
   startBrowserSpeechRecognition,
   startMicrophoneCapture,
   startScreenCapture,
+  startScreenFrameAnalysis,
   stopMediaStream,
   supportsBrowserSpeechRecognition,
   type CaptureHandles
 } from './lib/recognition'
+import { speakInsight, stopSpeechOutput } from './lib/speechOutput'
 
 const emptyCapture: CaptureState = {
   running: false,
@@ -47,9 +50,16 @@ const emptyCapture: CaptureState = {
   speechRecognition: false
 }
 
+const idleApiState: AssistantApiState = {
+  status: 'idle',
+  message: 'API готов к локальному серверу'
+}
+
 interface OverlaySnapshot {
   mode: InterviewMode
+  outputMode: OutputMode
   capture: CaptureState
+  apiState: AssistantApiState
   insights: InsightCard[]
   sourceName?: string
   latestSignal?: TranscriptItem
@@ -59,11 +69,12 @@ interface OverlaySnapshot {
 export function App() {
   const isOverlay = window.location.hash.includes('/overlay')
   const [mode, setMode] = useState<InterviewMode>('oral')
+  const [outputMode, setOutputMode] = useState<OutputMode>('overlay')
+  const [apiState, setApiState] = useState<AssistantApiState>(idleApiState)
   const [consentAccepted, setConsentAccepted] = useState(false)
   const [capture, setCapture] = useState<CaptureState>(emptyCapture)
   const [transcript, setTranscript] = useState<TranscriptItem[]>(initialTranscript)
   const [insights, setInsights] = useState<InsightCard[]>(getStarterInsights())
-  const [rubric, setRubric] = useState<RubricItem[]>(initialRubric)
   const [manualSignal, setManualSignal] = useState('')
   const [captureSources, setCaptureSources] = useState<CaptureSourceDescriptor[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState<string>()
@@ -73,7 +84,11 @@ export function App() {
   const [screenAccessStatus, setScreenAccessStatus] = useState<ScreenAccessStatus>('unknown')
   const [overlaySourceName, setOverlaySourceName] = useState('')
   const handlesRef = useRef<CaptureHandles>({})
-  const demoStopRef = useRef<(() => void) | null>(null)
+  const transcriptRef = useRef<TranscriptItem[]>(initialTranscript)
+  const outputModeRef = useRef<OutputMode>('overlay')
+  const modeRef = useRef<InterviewMode>('oral')
+  const requestSeqRef = useRef(0)
+  const sessionIdRef = useRef(crypto.randomUUID())
 
   useEffect(() => {
     document.body.dataset.route = isOverlay ? 'overlay' : 'app'
@@ -86,12 +101,12 @@ export function App() {
   const exportPayload = useMemo(
     () => ({
       mode,
+      outputMode,
       createdAt: new Date().toISOString(),
-      rubric,
       transcript,
       insights
     }),
-    [insights, mode, rubric, transcript]
+    [insights, mode, outputMode, transcript]
   )
 
   useEffect(() => {
@@ -105,6 +120,31 @@ export function App() {
   }, [isOverlay])
 
   useEffect(() => {
+    transcriptRef.current = transcript
+  }, [transcript])
+
+  useEffect(() => {
+    outputModeRef.current = outputMode
+  }, [outputMode])
+
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
+
+  useEffect(() => {
+    if (isOverlay || !capture.running) {
+      return
+    }
+
+    if (shouldShowOverlay(outputMode)) {
+      void window.assessor?.openOverlay()
+      return
+    }
+
+    void window.assessor?.closeOverlay()
+  }, [capture.running, isOverlay, outputMode])
+
+  useEffect(() => {
     if (!isOverlay) {
       return
     }
@@ -115,7 +155,9 @@ export function App() {
       }
 
       setMode(snapshot.mode)
+      setOutputMode(isOutputMode(snapshot.outputMode) ? snapshot.outputMode : 'overlay')
       setCapture(snapshot.capture)
+      setApiState(isApiState(snapshot.apiState) ? snapshot.apiState : idleApiState)
       setInsights(snapshot.insights)
       setTranscript(snapshot.latestSignal ? [snapshot.latestSignal] : [])
       setOverlaySourceName(snapshot.sourceName ?? '')
@@ -131,7 +173,18 @@ export function App() {
     }
 
     void window.assessor?.updateOverlay(createOverlaySnapshot())
-  }, [capture, captureSources, insights, isOverlay, mode, selectedSourceId, systemPickedSourceName, transcript])
+  }, [
+    apiState,
+    capture,
+    captureSources,
+    insights,
+    isOverlay,
+    mode,
+    outputMode,
+    selectedSourceId,
+    systemPickedSourceName,
+    transcript
+  ])
 
   async function refreshCaptureSources(): Promise<CaptureSourceDescriptor[]> {
     setSourceLoading(true)
@@ -172,9 +225,58 @@ export function App() {
     }
   }
 
-  function appendSignal(item: TranscriptItem): void {
-    setTranscript((current) => [item, ...current].slice(0, 80))
-    setInsights((current) => [createInsightFromSignal(item, mode), ...current].slice(0, 12))
+  async function appendSignal(item: TranscriptItem, imageDataUrl?: string): Promise<void> {
+    const previousTranscript = transcriptRef.current
+    const nextTranscript = [item, ...previousTranscript].slice(0, 80)
+    transcriptRef.current = nextTranscript
+    setTranscript(nextTranscript)
+    setApiState({ status: 'thinking', message: 'Отправляю сигнал на локальный API...' })
+
+    const requestId = requestSeqRef.current + 1
+    requestSeqRef.current = requestId
+
+    try {
+      const answer = await requestAssistantAnswer({
+        sessionId: sessionIdRef.current,
+        mode: modeRef.current,
+        outputMode: outputModeRef.current,
+        signal: { ...item, imageDataUrl },
+        context: {
+          sourceName: getSelectedSourceName(),
+          recentTranscript: previousTranscript.slice(0, 10)
+        }
+      })
+
+      if (requestSeqRef.current !== requestId) {
+        return
+      }
+
+      const nextInsights = answer.insights.slice(0, 12)
+      setInsights(nextInsights)
+      updateTranscriptText(item.id, answer.observedText)
+      setApiState({
+        status: 'online',
+        message: answer.model
+          ? `${answer.model}${answer.latencyMs ? ` · ${answer.latencyMs} ms` : ''}`
+          : 'Ответ получен от API'
+      })
+      deliverInsight(nextInsights[0])
+    } catch (error) {
+      if (requestSeqRef.current !== requestId) {
+        return
+      }
+
+      const fallback = markFallback(createInsightFromSignal(item, modeRef.current))
+      setInsights((current) => [fallback, ...current].slice(0, 12))
+      setApiState({
+        status: 'offline',
+        message:
+          error instanceof Error
+            ? `API недоступен: ${error.message}`
+            : 'API недоступен, показан локальный fallback'
+      })
+      deliverInsight(fallback)
+    }
   }
 
   async function startCapture(): Promise<void> {
@@ -182,12 +284,23 @@ export function App() {
     const wantsMic = mode !== 'screen-text'
 
     try {
+      if (wantsScreen) {
+        setTranscript([])
+        setInsights([])
+      }
+
       setCapture({ running: true, screen: false, microphone: false, speechRecognition: false })
 
       if (wantsScreen) {
         handlesRef.current.screenStream = await startScreenCapture(selectedSourceId)
         const pickedTrack = handlesRef.current.screenStream.getVideoTracks()[0]
         setSystemPickedSourceName(pickedTrack?.label || 'Выбранное окно')
+        handlesRef.current.screenAnalysisStop = startScreenFrameAnalysis(
+          handlesRef.current.screenStream,
+          mode,
+          (item, imageDataUrl) => void appendSignal(item, imageDataUrl),
+          (message) => setCapture((current) => ({ ...current, error: message }))
+        )
       }
 
       if (wantsMic) {
@@ -197,13 +310,14 @@ export function App() {
       if (wantsMic && supportsBrowserSpeechRecognition()) {
         handlesRef.current.speechStop = startBrowserSpeechRecognition(
           'ru-RU',
-          appendSignal,
+          (item) => void appendSignal(item),
           (message) => setCapture((current) => ({ ...current, error: message }))
         )
       }
 
-      void window.assessor?.openOverlay()
-      demoStopRef.current = createDemoRecognitionLoop(mode, ({ item }) => appendSignal(item))
+      if (shouldShowOverlay(outputModeRef.current)) {
+        void window.assessor?.openOverlay()
+      }
 
       setCapture({
         running: true,
@@ -212,12 +326,8 @@ export function App() {
         speechRecognition: Boolean(handlesRef.current.speechStop)
       })
     } catch (error) {
-      if (!wantsScreen) {
-        demoStopRef.current = createDemoRecognitionLoop(mode, ({ item }) => appendSignal(item))
-      }
-
       setCapture({
-        running: !wantsScreen,
+        running: false,
         screen: false,
         microphone: false,
         speechRecognition: false,
@@ -227,11 +337,11 @@ export function App() {
   }
 
   function stopCapture(): void {
-    demoStopRef.current?.()
-    demoStopRef.current = null
     handlesRef.current.speechStop?.()
+    handlesRef.current.screenAnalysisStop?.()
     stopMediaStream(handlesRef.current.screenStream)
     stopMediaStream(handlesRef.current.microphoneStream)
+    stopSpeechOutput()
     handlesRef.current = {}
     setSystemPickedSourceName('')
     setCapture(emptyCapture)
@@ -241,7 +351,9 @@ export function App() {
   function createOverlaySnapshot(): OverlaySnapshot {
     return {
       mode,
+      outputMode,
       capture,
+      apiState,
       insights,
       sourceName: getSelectedSourceName(),
       latestSignal: transcript[0],
@@ -259,12 +371,43 @@ export function App() {
       return
     }
 
-    appendSignal(createTranscriptItem(mode, text, 'manual'))
+    void appendSignal(createTranscriptItem(mode, text, 'manual'))
     setManualSignal('')
   }
 
-  function updateRubric(id: string, score: number): void {
-    setRubric((items) => items.map((item) => (item.id === id ? { ...item, score } : item)))
+  function updateTranscriptText(id: string, text?: string): void {
+    const nextText = text?.trim()
+    if (!nextText) {
+      return
+    }
+
+    const nextTranscript = transcriptRef.current.map((item) =>
+      item.id === id ? { ...item, text: nextText } : item
+    )
+    transcriptRef.current = nextTranscript
+    setTranscript(nextTranscript)
+  }
+
+  function deliverInsight(insight?: InsightCard): void {
+    if (!insight) {
+      return
+    }
+
+    const currentOutputMode = outputModeRef.current
+
+    if (shouldShowOverlay(currentOutputMode)) {
+      void window.assessor?.openOverlay()
+    }
+
+    if (currentOutputMode === 'audio' || currentOutputMode === 'both') {
+      const spoken = speakInsight(insight)
+      if (!spoken) {
+        setApiState((current) => ({
+          ...current,
+          message: `${current.message}. Озвучка недоступна в этом окружении.`
+        }))
+      }
+    }
   }
 
   async function copyExport(): Promise<void> {
@@ -350,7 +493,9 @@ export function App() {
     <main className="app-shell">
       <TopBar
         mode={mode}
+        outputMode={outputMode}
         capture={capture}
+        apiState={apiState}
         consentAccepted={consentAccepted}
         onModeChange={(nextMode) => {
           if (capture.running) {
@@ -358,6 +503,7 @@ export function App() {
           }
           setMode(nextMode)
         }}
+        onOutputModeChange={setOutputMode}
         onStart={startCapture}
         onStop={stopCapture}
         onOpenOverlay={() => window.assessor?.openOverlay()}
@@ -390,7 +536,6 @@ export function App() {
             />
           ) : null}
           <InsightDeck insights={insights} />
-          <RubricBoard items={rubric} onChange={updateRubric} />
         </div>
 
         <TranscriptFeed items={transcript} />
@@ -403,6 +548,8 @@ export function App() {
             </div>
             <FileText size={20} aria-hidden="true" />
           </header>
+
+          <p className={`api-note api-note-${apiState.status}`}>{apiState.message}</p>
 
           <textarea
             value={manualSignal}
@@ -453,6 +600,19 @@ function getPreferredSource(sources: CaptureSourceDescriptor[]): CaptureSourceDe
   )
 }
 
+function shouldShowOverlay(outputMode: OutputMode): boolean {
+  return outputMode === 'overlay' || outputMode === 'both'
+}
+
+function markFallback(insight: InsightCard): InsightCard {
+  return {
+    ...insight,
+    id: crypto.randomUUID(),
+    title: `Локальный fallback: ${insight.title}`,
+    confidence: Math.min(insight.confidence, 0.62)
+  }
+}
+
 function isOverlaySnapshot(value: unknown): value is OverlaySnapshot {
   if (!value || typeof value !== 'object') {
     return false
@@ -460,4 +620,17 @@ function isOverlaySnapshot(value: unknown): value is OverlaySnapshot {
 
   const snapshot = value as Partial<OverlaySnapshot>
   return Array.isArray(snapshot.insights) && typeof snapshot.mode === 'string'
+}
+
+function isOutputMode(value: unknown): value is OutputMode {
+  return value === 'overlay' || value === 'audio' || value === 'both'
+}
+
+function isApiState(value: unknown): value is AssistantApiState {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const state = value as Partial<AssistantApiState>
+  return typeof state.message === 'string' && typeof state.status === 'string'
 }
