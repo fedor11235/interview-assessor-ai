@@ -69,6 +69,7 @@ export function App() {
   const [selectedSourceId, setSelectedSourceId] = useState<string>()
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceError, setSourceError] = useState<string>()
+  const [screenAccessStatus, setScreenAccessStatus] = useState<ScreenAccessStatus>('unknown')
   const [overlaySourceName, setOverlaySourceName] = useState('')
   const handlesRef = useRef<CaptureHandles>({})
   const demoStopRef = useRef<(() => void) | null>(null)
@@ -135,7 +136,18 @@ export function App() {
     setSourceLoading(true)
     setSourceError(undefined)
 
+    if (!window.assessor) {
+      setSourceError('Список окон доступен только в Electron-приложении, не в браузерном preview.')
+      setSourceLoading(false)
+      return []
+    }
+
     try {
+      const accessStatus = await window.assessor?.getScreenAccessStatus()
+      if (accessStatus) {
+        setScreenAccessStatus(accessStatus)
+      }
+
       const sources = await window.assessor?.listCaptureSources()
       const nextSources = sortCaptureSources(sources ?? [])
       setCaptureSources(nextSources)
@@ -150,7 +162,9 @@ export function App() {
 
       return nextSources
     } catch (error) {
-      setSourceError(error instanceof Error ? error.message : 'Не удалось получить список окон.')
+      setSourceError(
+        error instanceof Error ? error.message : 'Не удалось получить список окон.'
+      )
       return []
     } finally {
       setSourceLoading(false)
@@ -163,19 +177,10 @@ export function App() {
   }
 
   async function startCapture(): Promise<void> {
+    const wantsScreen = mode !== 'oral'
+    const wantsMic = mode !== 'screen-text'
+
     try {
-      const wantsScreen = mode !== 'oral'
-      const wantsMic = mode !== 'screen-text'
-
-      if (wantsScreen && !selectedSourceId) {
-        await refreshCaptureSources()
-        setCapture({
-          ...emptyCapture,
-          error: 'Выбери конкретное окно или экран для анализа.'
-        })
-        return
-      }
-
       setCapture({ running: true, screen: false, microphone: false, speechRecognition: false })
       void window.assessor?.openOverlay()
 
@@ -204,9 +209,12 @@ export function App() {
         speechRecognition: Boolean(handlesRef.current.speechStop)
       })
     } catch (error) {
-      demoStopRef.current = createDemoRecognitionLoop(mode, ({ item }) => appendSignal(item))
+      if (!wantsScreen) {
+        demoStopRef.current = createDemoRecognitionLoop(mode, ({ item }) => appendSignal(item))
+      }
+
       setCapture({
-        running: true,
+        running: !wantsScreen,
         screen: false,
         microphone: false,
         speechRecognition: false,
@@ -366,10 +374,12 @@ export function App() {
             <SourcePicker
               sources={captureSources}
               selectedSourceId={selectedSourceId}
+              accessStatus={screenAccessStatus}
               disabled={capture.running}
               loading={sourceLoading}
               error={sourceError}
               onRefresh={refreshCaptureSources}
+              onOpenScreenSettings={() => void window.assessor?.openScreenSettings()}
               onSelect={setSelectedSourceId}
             />
           ) : null}

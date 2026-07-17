@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 const api = {
   platform: process.platform,
   listCaptureSources: (): Promise<unknown> => ipcRenderer.invoke('capture:list-sources'),
+  getScreenAccessStatus: (): Promise<unknown> => ipcRenderer.invoke('capture:get-screen-access-status'),
+  openScreenSettings: (): Promise<void> => ipcRenderer.invoke('capture:open-screen-settings'),
   openOverlay: (): Promise<void> => ipcRenderer.invoke('overlay:open'),
   closeOverlay: (): Promise<void> => ipcRenderer.invoke('overlay:close'),
   getOverlaySnapshot: (): Promise<unknown> => ipcRenderer.invoke('overlay:get-snapshot'),

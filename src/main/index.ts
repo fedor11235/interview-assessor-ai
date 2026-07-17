@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, shell, systemPreferences } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -149,6 +149,10 @@ app.whenReady().then(() => {
       appIcon: source.appIcon?.toDataURL()
     }))
   })
+  ipcMain.handle('capture:get-screen-access-status', () => systemPreferences.getMediaAccessStatus('screen'))
+  ipcMain.handle('capture:open-screen-settings', () =>
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+  )
 
   ipcMain.handle('overlay:open', () => createOverlayWindow())
   ipcMain.handle('overlay:close', () => overlayWindow?.close())

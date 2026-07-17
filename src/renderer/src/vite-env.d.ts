@@ -4,6 +4,8 @@ interface Window {
   assessor?: {
     platform: NodeJS.Platform
     listCaptureSources: () => Promise<CaptureSourceDescriptor[]>
+    getScreenAccessStatus: () => Promise<ScreenAccessStatus>
+    openScreenSettings: () => Promise<void>
     openOverlay: () => Promise<void>
     closeOverlay: () => Promise<void>
     getOverlaySnapshot: () => Promise<unknown>
@@ -22,6 +24,8 @@ interface CaptureSourceDescriptor {
   thumbnail: string
   appIcon?: string
 }
+
+type ScreenAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
 
 interface SpeechRecognitionConstructor {
   new (): SpeechRecognition
