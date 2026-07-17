@@ -3,11 +3,13 @@ import { AppWindow, Check, Monitor, RefreshCw } from 'lucide-react'
 interface SourcePickerProps {
   sources: CaptureSourceDescriptor[]
   selectedSourceId?: string
+  selectedSourceName?: string
   accessStatus?: ScreenAccessStatus
   disabled?: boolean
   loading?: boolean
   error?: string
   onRefresh: () => void
+  onChooseWindow: () => void
   onOpenScreenSettings: () => void
   onSelect: (sourceId: string) => void
 }
@@ -15,11 +17,13 @@ interface SourcePickerProps {
 export function SourcePicker({
   sources,
   selectedSourceId,
+  selectedSourceName,
   accessStatus,
   disabled,
   loading,
   error,
   onRefresh,
+  onChooseWindow,
   onOpenScreenSettings,
   onSelect
 }: SourcePickerProps) {
@@ -42,6 +46,7 @@ export function SourcePicker({
       </header>
 
       {error ? <p className="source-error">{error}</p> : null}
+      {selectedSourceName ? <p className="source-selected">Источник: {selectedSourceName}</p> : null}
 
       {sources.length > 0 ? (
         <div className="source-list">
@@ -71,16 +76,20 @@ export function SourcePicker({
         <div className="source-empty">
           <Monitor size={20} aria-hidden="true" />
           <div>
-            <strong>Список окон пока пуст</strong>
+            <strong>Выбор через системное окно</strong>
             <p>
-              Нажми Start, чтобы выбрать окно через системный picker. Если macOS не показывает окна, разреши Screen
-              Recording для Electron.
+              Нажми кнопку ниже, затем в окне macOS выбери Chrome или другой браузер, где открыт тест.
             </p>
-            {accessStatus && accessStatus !== 'granted' ? (
-              <button type="button" className="secondary-button" onClick={onOpenScreenSettings}>
-                Открыть настройки
+            <div className="source-empty-actions">
+              <button type="button" className="primary-button" disabled={disabled} onClick={onChooseWindow}>
+                Открыть выбор окна
               </button>
-            ) : null}
+              {accessStatus && accessStatus !== 'granted' ? (
+                <button type="button" className="secondary-button" onClick={onOpenScreenSettings}>
+                  Открыть настройки
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

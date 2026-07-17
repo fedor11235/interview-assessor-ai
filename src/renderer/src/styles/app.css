@@ -540,6 +540,17 @@ meter {
   line-height: 1.35;
 }
 
+.source-selected {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--teal);
+  background: rgba(20, 92, 89, 0.1);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .source-empty {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -561,6 +572,12 @@ meter {
   margin: 4px 0 10px;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.source-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .notes-panel {
@@ -607,27 +624,24 @@ meter {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 38px;
-  margin-bottom: 8px;
-  padding: 0 8px 0 12px;
-  border: 1px solid rgba(216, 208, 191, 0.9);
-  border-radius: 8px;
-  color: #fffaf0;
-  background: rgba(23, 25, 29, 0.86);
-  font-size: 13px;
+  min-height: 30px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(255, 252, 243, 0.13);
+  color: rgba(255, 252, 243, 0.74);
+  background: transparent;
+  font-size: 12px;
   font-weight: 900;
-  backdrop-filter: blur(16px);
 }
 
 .overlay-handle button {
   -webkit-app-region: no-drag;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border-radius: 7px;
   color: #fffaf0;
-  background: rgba(255, 250, 240, 0.12);
+  background: rgba(255, 250, 240, 0.1);
   cursor: pointer;
 }
 
@@ -635,7 +649,7 @@ meter {
   pointer-events: auto;
   display: grid;
   gap: 10px;
-  max-height: calc(100vh - 54px);
+  max-height: calc(100vh - 16px);
   overflow: auto;
   padding: 12px;
   border: 1px solid rgba(255, 252, 243, 0.26);

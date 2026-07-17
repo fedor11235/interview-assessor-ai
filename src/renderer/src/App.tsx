@@ -67,6 +67,7 @@ export function App() {
   const [manualSignal, setManualSignal] = useState('')
   const [captureSources, setCaptureSources] = useState<CaptureSourceDescriptor[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState<string>()
+  const [systemPickedSourceName, setSystemPickedSourceName] = useState('')
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceError, setSourceError] = useState<string>()
   const [screenAccessStatus, setScreenAccessStatus] = useState<ScreenAccessStatus>('unknown')
@@ -130,7 +131,7 @@ export function App() {
     }
 
     void window.assessor?.updateOverlay(createOverlaySnapshot())
-  }, [capture, captureSources, insights, isOverlay, mode, selectedSourceId, transcript])
+  }, [capture, captureSources, insights, isOverlay, mode, selectedSourceId, systemPickedSourceName, transcript])
 
   async function refreshCaptureSources(): Promise<CaptureSourceDescriptor[]> {
     setSourceLoading(true)
@@ -186,6 +187,8 @@ export function App() {
 
       if (wantsScreen) {
         handlesRef.current.screenStream = await startScreenCapture(selectedSourceId)
+        const pickedTrack = handlesRef.current.screenStream.getVideoTracks()[0]
+        setSystemPickedSourceName(pickedTrack?.label || 'Выбранное окно')
       }
 
       if (wantsMic) {
@@ -230,6 +233,7 @@ export function App() {
     stopMediaStream(handlesRef.current.screenStream)
     stopMediaStream(handlesRef.current.microphoneStream)
     handlesRef.current = {}
+    setSystemPickedSourceName('')
     setCapture(emptyCapture)
     void window.assessor?.updateOverlay({ ...createOverlaySnapshot(), capture: emptyCapture })
   }
@@ -246,7 +250,7 @@ export function App() {
   }
 
   function getSelectedSourceName(): string | undefined {
-    return captureSources.find((source) => source.id === selectedSourceId)?.name
+    return systemPickedSourceName || captureSources.find((source) => source.id === selectedSourceId)?.name
   }
 
   function submitManualSignal(): void {
@@ -283,15 +287,15 @@ export function App() {
 
     return (
       <main className="overlay-shell">
-        <div className="overlay-handle">
-          <Move size={16} aria-hidden="true" />
-          <span>AI ответы поверх экрана</span>
-          <button type="button" onClick={() => window.assessor?.closeOverlay()} aria-label="Close overlay">
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
-
         <section className="overlay-answer-panel" aria-label="AI overlay answers">
+          <div className="overlay-handle">
+            <Move size={16} aria-hidden="true" />
+            <span>AI ответы</span>
+            <button type="button" onClick={() => window.assessor?.closeOverlay()} aria-label="Close overlay">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+
           <header className="overlay-status">
             <span className={capture.running ? 'overlay-dot active' : 'overlay-dot'} />
             <strong>{capture.running ? 'Live overlay' : 'Overlay ready'}</strong>
@@ -374,11 +378,13 @@ export function App() {
             <SourcePicker
               sources={captureSources}
               selectedSourceId={selectedSourceId}
+              selectedSourceName={getSelectedSourceName()}
               accessStatus={screenAccessStatus}
-              disabled={capture.running}
+              disabled={capture.running || !consentAccepted}
               loading={sourceLoading}
               error={sourceError}
               onRefresh={refreshCaptureSources}
+              onChooseWindow={startCapture}
               onOpenScreenSettings={() => void window.assessor?.openScreenSettings()}
               onSelect={setSelectedSourceId}
             />
